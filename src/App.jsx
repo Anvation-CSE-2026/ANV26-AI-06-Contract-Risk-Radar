@@ -32,6 +32,67 @@ function App() {
     }
   }, [])
 
+  // Load default playbook on mount
+  useEffect(() => {
+    const loadDefaultPlaybook = async () => {
+      try {
+        const data = await api.listPlaybookRules()
+        setPlaybook(data)
+      } catch (error) {
+        console.error('Failed to load playbook:', error)
+        // Set default playbook if backend not available
+        setPlaybook([
+          {
+            id: 1,
+            name: 'Limitation of Liability Cap',
+            category: 'Risk',
+            description: 'Limitation of liability must be capped at a specific monetary amount or multiple of fees',
+            severity: 'high',
+            required: true,
+            keywords: ['limitation of liability', 'liability cap', 'shall not exceed']
+          },
+          {
+            id: 2,
+            name: 'Indemnification Clause',
+            category: 'Standard',
+            description: 'Mutual indemnification for third-party claims',
+            severity: 'medium',
+            required: true,
+            keywords: ['indemnify', 'indemnification', 'hold harmless']
+          },
+          {
+            id: 3,
+            name: 'Termination for Convenience',
+            category: 'Standard',
+            description: 'Termination for Convenience',
+            severity: 'low',
+            required: false,
+            keywords: ['terminate for convenience', 'termination without cause']
+          },
+          {
+            id: 4,
+            name: 'Governing Law',
+            category: 'Standard',
+            description: 'Governing law must be specified and preferably favorable jurisdiction',
+            severity: 'medium',
+            required: true,
+            keywords: ['governing law', 'governed by', 'jurisdiction']
+          },
+          {
+            id: 5,
+            name: 'Force Majeure',
+            category: 'Standard',
+            description: 'Force majeure clause for unforeseeable circumstances',
+            severity: 'low',
+            required: true,
+            keywords: ['force majeure', 'act of god', 'unforeseeable']
+          }
+        ])
+      }
+    }
+    loadDefaultPlaybook()
+  }, [])
+
   const handleContractUpload = (contractData) => {
     setContract(contractData)
     setActiveTab('inventory')
@@ -102,7 +163,17 @@ function App() {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Upload Documents
+              Upload Contract
+            </button>
+            <button
+              onClick={() => setActiveTab('playbook')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'playbook'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Playbook Rules
             </button>
             <button
               onClick={() => setActiveTab('inventory')}
@@ -133,10 +204,10 @@ function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         {activeTab === 'upload' && (
-          <div className="space-y-8">
-            <ContractUpload onUpload={handleContractUpload} />
-            <PlaybookUpload onUpload={handlePlaybookUpload} />
-          </div>
+          <ContractUpload onUpload={handleContractUpload} />
+        )}
+        {activeTab === 'playbook' && (
+          <PlaybookUpload onUpload={handlePlaybookUpload} />
         )}
         {activeTab === 'inventory' && contract && (
           <ClauseInventory contract={contract} />

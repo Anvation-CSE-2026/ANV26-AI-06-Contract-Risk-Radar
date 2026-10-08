@@ -5,58 +5,8 @@ import { api } from '../api'
 const ContractUpload = ({ onUpload }) => {
   const [dragActive, setDragActive] = useState(false)
   const [contractText, setContractText] = useState('')
-  const [sampleContract, setSampleContract] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const sampleContracts = [
-    {
-      id: 1,
-      name: 'Software License Agreement',
-      content: `SOFTWARE LICENSE AGREEMENT
-
-This Software License Agreement ("Agreement") is entered into as of the date of acceptance between Licensor and Licensee.
-
-1. GRANT OF LICENSE
-Subject to the terms and conditions of this Agreement, Licensor hereby grants to Licensee a non-exclusive, non-transferable license to use the Software solely for internal business purposes.
-
-2. TERM AND TERMINATION
-This Agreement shall commence on the Effective Date and continue for a period of twelve (12) months, unless terminated earlier as provided herein. Either party may terminate this Agreement upon thirty (30) days written notice.
-
-3. CONFIDENTIALITY
-Each party agrees to maintain the confidentiality of all proprietary information disclosed during the term of this Agreement.
-
-4. LIMITATION OF LIABILITY
-IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES, REGARDLESS OF THE CAUSE.
-
-5. INTELLECTUAL PROPERTY
-All intellectual property rights in the Software shall remain with Licensor.
-
-6. GOVERNING LAW
-This Agreement shall be governed by the laws of the State of Delaware.`
-    },
-    {
-      id: 2,
-      name: 'Service Level Agreement',
-      content: `SERVICE LEVEL AGREEMENT
-
-This Service Level Agreement ("SLA") is between Provider and Customer.
-
-1. SERVICE AVAILABILITY
-Provider shall maintain 99.9% uptime for the Services during normal business hours.
-
-2. RESPONSE TIMES
-Provider shall respond to critical issues within 4 hours and non-critical issues within 24 hours.
-
-3. CREDITS
-If Service Availability falls below 99.9%, Customer shall be entitled to service credits equal to 10% of the monthly fee for each 1% shortfall.
-
-4. MAINTENANCE
-Provider may perform scheduled maintenance with 48 hours notice to Customer.
-
-5. SUPPORT
-Provider shall provide email support during business hours, Monday through Friday.`
-    }
-  ]
+  const fileInputRef = React.useRef(null)
 
   const handleDrag = (e) => {
     e.preventDefault()
@@ -94,9 +44,8 @@ Provider shall provide email support during business hours, Monday through Frida
     }
   }
 
-  const loadSampleContract = (contract) => {
-    setSampleContract(contract)
-    setContractText(contract.content)
+  const handleButtonClick = () => {
+    fileInputRef.current?.click()
   }
 
   const handleSubmit = async () => {
@@ -105,7 +54,7 @@ Provider shall provide email support during business hours, Monday through Frida
       try {
         const result = await api.createContract({
           text: contractText,
-          name: sampleContract ? sampleContract.name : 'Uploaded Contract'
+          name: 'Uploaded Contract'
         })
         onUpload({
           id: result.id,
@@ -121,7 +70,7 @@ Provider shall provide email support during business hours, Monday through Frida
           id: Date.now(),
           text: contractText,
           clauses: clauses,
-          name: sampleContract ? sampleContract.name : 'Uploaded Contract'
+          name: 'Uploaded Contract'
         })
       } finally {
         setIsSubmitting(false)
@@ -176,31 +125,8 @@ Provider shall provide email support during business hours, Monday through Frida
         <div>
           <h2 className="text-xl font-bold text-gray-900">Upload Contract</h2>
           <p className="text-sm text-gray-500">
-            Upload a contract document or use a sample to begin analysis
+            Upload a contract document to begin analysis
           </p>
-        </div>
-      </div>
-
-      {/* Sample Contracts */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Sample Contracts</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {sampleContracts.map((contract) => (
-            <button
-              key={contract.id}
-              onClick={() => loadSampleContract(contract)}
-              className={`p-4 rounded-lg border-2 text-left transition-all ${
-                sampleContract?.id === contract.id
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
-              }`}
-            >
-              <div className="flex items-center space-x-2">
-                <FileText className="w-4 h-4 text-gray-500" />
-                <span className="font-medium text-gray-900">{contract.name}</span>
-              </div>
-            </button>
-          ))}
         </div>
       </div>
 
@@ -220,17 +146,19 @@ Provider shall provide email support during business hours, Monday through Frida
         <p className="text-gray-600 mb-2">
           Drag and drop your contract file here, or
         </p>
-        <label className="cursor-pointer">
-          <span className="text-primary-600 font-medium hover:text-primary-700">
-            browse to upload
-          </span>
-          <input
-            type="file"
-            accept=".txt,.md"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </label>
+        <button
+          onClick={handleButtonClick}
+          className="text-primary-600 font-medium hover:text-primary-700 cursor-pointer bg-transparent border-none"
+        >
+          browse to upload
+        </button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".txt,.md"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
         <p className="text-sm text-gray-500 mt-2">
           Supports .txt and .md files
         </p>
