@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
-import { Upload, FileText, AlertCircle } from 'lucide-react'
+import { Upload, FileText, AlertCircle, Loader2 } from 'lucide-react'
+import { api } from '../api'
 
 const ContractUpload = ({ onUpload }) => {
   const [dragActive, setDragActive] = useState(false)
   const [contractText, setContractText] = useState('')
   const [sampleContract, setSampleContract] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const sampleContracts = [
     {
@@ -97,14 +99,26 @@ Provider shall provide email support during business hours, Monday through Frida
     setContractText(contract.content)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (contractText.trim()) {
-      const clauses = parseContract(contractText)
-      onUpload({
-        text: contractText,
-        clauses: clauses,
-        name: sampleContract ? sampleContract.name : 'Uploaded Contract'
-      })
+      setIsSubmitting(true)
+      try {
+        const result = await api.createContract({
+          text: contractText,
+          name: sampleContract ? sampleContract.name : 'Uploaded Contract'
+        })
+        onUpload({
+          id: result.id,
+          text: result.text,
+          clauses: result.clauses,
+          name: result.name
+        })
+      } catch (error) {
+        console.error('Failed to create contract:', error)
+        alert('Failed to upload contract. Please try again.')
+      } finally {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -235,9 +249,17 @@ Provider shall provide email support during business hours, Monday through Frida
         <div className="mt-6 flex justify-end">
           <button
             onClick={handleSubmit}
-            className="btn-primary"
+            disabled={isSubmitting}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Analyze Contract
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              'Analyze Contract'
+            )}
           </button>
         </div>
       )}

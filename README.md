@@ -20,47 +20,124 @@ This web application helps review contracts by identifying risks, obligations, a
 - Filter and search through clauses and risks
 - Visual risk indicators (high/medium/low)
 - Source traceability to specific line numbers
+- **Backend API**: Python Flask backend with SQLite database for persistent storage
 
 ## Tech Stack
 
+### Frontend
 - React 18
 - Vite
 - TailwindCSS
 - Lucide React (icons)
 
+### Backend
+- Python 3
+- Flask
+- Flask-SQLAlchemy
+- SQLite
+
 ## Installation
 
-1. Install dependencies:
+### Frontend Setup
+
+1. Install frontend dependencies:
 ```bash
 npm install
 ```
 
-2. Start the development server:
+2. Start the frontend development server:
 ```bash
 npm run dev
 ```
 
 3. Open your browser to `http://localhost:3000`
 
+### Backend Setup
+
+1. Navigate to the backend directory:
+```bash
+cd backend
+```
+
+2. Create a virtual environment (optional but recommended):
+```bash
+python -m venv venv
+```
+
+3. Activate the virtual environment:
+```bash
+# Windows
+venv\Scripts\activate
+
+# macOS/Linux
+source venv/bin/activate
+```
+
+4. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+5. Start the Flask backend server:
+```bash
+python app.py
+```
+
+The backend will run on `http://localhost:5000`
+
 ## Usage
 
-1. **Upload Contract**: Either upload a contract file or select a sample contract
-2. **Define Playbook**: Add playbook rules with categories, severity, and keywords
-3. **View Clause Inventory**: Browse all extracted clauses with source traceability
-4. **Analyze Risks**: Review risk analysis with traceability to both contract clauses and playbook rules
+1. **Start Backend**: Run the Python Flask server (port 5000)
+2. **Start Frontend**: Run the React development server (port 3000)
+3. **Upload Contract**: Either upload a contract file or select a sample contract
+4. **Define Playbook**: Add playbook rules with categories, severity, and keywords
+5. **View Clause Inventory**: Browse all extracted clauses with source traceability
+6. **Analyze Risks**: Review risk analysis with traceability to both contract clauses and playbook rules
+
+## API Endpoints
+
+### Health Check
+- `GET /api/health` - Check if backend is running
+
+### Contracts
+- `POST /api/contracts` - Create a new contract
+- `GET /api/contracts` - List all contracts
+- `GET /api/contracts/:id` - Get a specific contract
+
+### Playbook Rules
+- `POST /api/playbook/rules` - Create a new playbook rule
+- `GET /api/playbook/rules` - List all playbook rules
+- `DELETE /api/playbook/rules/:id` - Delete a playbook rule
+
+### Risk Analysis
+- `POST /api/analysis` - Perform risk analysis on a contract
+- `GET /api/analysis/:id` - Get a specific analysis
+- `GET /api/contracts/:id/analysis` - Get analysis for a contract
 
 ## Project Structure
 
 ```
-src/
-├── components/
-│   ├── ContractUpload.jsx    # Contract upload and parsing
-│   ├── PlaybookUpload.jsx    # Playbook rule management
-│   ├── ClauseInventory.jsx   # Clause display and filtering
-│   └── RiskAnalysis.jsx      # Risk analysis and traceability
-├── App.jsx                   # Main application component
-├── main.jsx                  # React entry point
-└── index.css                 # TailwindCSS styles
+.
+├── backend/
+│   ├── app.py                 # Flask application and API endpoints
+│   ├── models.py              # SQLAlchemy database models
+│   ├── contract_parser.py     # Contract parsing logic
+│   ├── risk_analyzer.py       # Risk analysis logic
+│   ├── requirements.txt       # Python dependencies
+│   └── contract_radar.db      # SQLite database (created automatically)
+├── src/
+│   ├── components/
+│   │   ├── ContractUpload.jsx    # Contract upload and parsing
+│   │   ├── PlaybookUpload.jsx    # Playbook rule management
+│   │   ├── ClauseInventory.jsx   # Clause display and filtering
+│   │   └── RiskAnalysis.jsx      # Risk analysis and traceability
+│   ├── api.js                # API client for backend communication
+│   ├── App.jsx               # Main application component
+│   ├── main.jsx              # React entry point
+│   └── index.css             # TailwindCSS styles
+├── package.json
+├── vite.config.js
+└── README.md
 ```
 
 ## License

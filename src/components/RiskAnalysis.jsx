@@ -1,11 +1,37 @@
-import React, { useState } from 'react'
-import { AlertTriangle, CheckCircle, AlertCircle, Search, Filter, ChevronDown, ChevronUp, Link2, FileText, BookOpen } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { AlertTriangle, CheckCircle, AlertCircle, Search, Filter, ChevronDown, ChevronUp, Link2, FileText, BookOpen, Loader2 } from 'lucide-react'
+import { api } from '../api'
 
 const RiskAnalysis = ({ contract, playbook }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSeverity, setFilterSeverity] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [expandedRisks, setExpandedRisks] = useState({})
+  const [analysisResults, setAnalysisResults] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    if (contract && contract.id && playbook) {
+      loadAnalysis()
+    } else if (contract && playbook) {
+      // Fallback to client-side analysis if no backend
+      setAnalysisResults(analyzeRisks())
+    }
+  }, [contract, playbook])
+
+  const loadAnalysis = async () => {
+    setIsLoading(true)
+    try {
+      const data = await api.getContractAnalysis(contract.id)
+      setAnalysisResults(data.results)
+    } catch (error) {
+      console.error('Failed to load analysis:', error)
+      // Fallback to client-side analysis
+      setAnalysisResults(analyzeRisks())
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const analyzeRisks = () => {
     const analysis = []
@@ -72,7 +98,7 @@ const RiskAnalysis = ({ contract, playbook }) => {
     return analysis
   }
 
-  const risks = analyzeRisks()
+  const risks = analysisResults || analyzeRisks()
 
   const toggleRisk = (id) => {
     setExpandedRisks(prev => ({
@@ -340,119 +366,126 @@ const RiskAnalysis = ({ contract, playbook }) => {
       )}
 
       {/* Risks List */}
-      <div className="space-y-3">
-        {filteredRisks.length === 0 ? (
-          <div className="card text-center py-12">
-            <CheckCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-            <p className="text-gray-500">No risks found matching your criteria</p>
-          </div>
-        ) : (
-          filteredRisks.map((risk) => (
-            <div
-              key={risk.id}
-              className={`card border-2 ${getStatusColor(risk.status)} cursor-pointer hover:shadow-md transition-shadow`}
-              onClick={() => toggleRisk(risk.id)}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    {getStatusIcon(risk.status)}
-                    <h3 className="font-semibold text-gray-900">{risk.rule.name}</h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(risk.severity)}`}>
-                      {risk.severity}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      risk.status === 'found' ? 'bg-green-100 text-green-700' :
-                      risk.status === 'missing' ? 'bg-red-100 text-red-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {risk.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2">{risk.rule.description}</p>
-                  
-                  {risk.clause && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-500">
-                      <FileText className="w-4 h-4" />
-                      <span>Matched with: {risk.clause.title}</span>
-                      <span className="text-gray-300">•</span>
-                      <span className="text-primary-600">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</span>
+      {isLoading ? (
+        <div className="card flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 text-gray-400 animate-spin mr-3" />
+          <span className="text-gray-500">Analyzing contract...</span>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredRisks.length === 0 ? (
+            <div className="card text-center py-12">
+              <CheckCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+              <p className="text-gray-500">No risks found matching your criteria</p>
+            </div>
+          ) : (
+            filteredRisks.map((risk) => (
+              <div
+                key={risk.id}
+                className={`card border-2 ${getStatusColor(risk.status)} cursor-pointer hover:shadow-md transition-shadow`}
+                onClick={() => toggleRisk(risk.id)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-2">
+                      {getStatusIcon(risk.status)}
+                      <h3 className="font-semibold text-gray-900">{risk.rule.name}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(risk.severity)}`}>
+                        {risk.severity}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        risk.status === 'found' ? 'bg-green-100 text-green-700' :
+                        risk.status === 'missing' ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {risk.status}
+                      </span>
                     </div>
-                  )}
-                  
-                  {risk.matchedKeywords.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {risk.matchedKeywords.map((keyword, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs"
-                        >
-                          {keyword}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="ml-4">
-                  {expandedRisks[risk.id] ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  )}
-                </div>
-              </div>
-
-              {expandedRisks[risk.id] && (
-                <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
-                  {/* Traceability */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
-                      <Link2 className="w-4 h-4" />
-                      <span>Traceability</span>
-                    </h4>
-                    <div className="space-y-2">
-                      <div className="flex items-start space-x-2">
-                        <BookOpen className="w-4 h-4 text-purple-500 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">Playbook Rule</p>
-                          <p className="text-sm text-gray-600">{risk.rule.name}</p>
-                          <p className="text-xs text-gray-500">Category: {risk.rule.category}</p>
-                        </div>
+                    <p className="text-sm text-gray-600 mb-2">{risk.rule.description}</p>
+                    
+                    {risk.clause && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-500">
+                        <FileText className="w-4 h-4" />
+                        <span>Matched with: {risk.clause.title}</span>
+                        <span className="text-gray-300">•</span>
+                        <span className="text-primary-600">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</span>
                       </div>
-                      {risk.clause && (
+                    )}
+                    
+                    {risk.matchedKeywords.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {risk.matchedKeywords.map((keyword, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs"
+                          >
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="ml-4">
+                    {expandedRisks[risk.id] ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </div>
+                </div>
+
+                {expandedRisks[risk.id] && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                    {/* Traceability */}
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
+                        <Link2 className="w-4 h-4" />
+                        <span>Traceability</span>
+                      </h4>
+                      <div className="space-y-2">
                         <div className="flex items-start space-x-2">
-                          <FileText className="w-4 h-4 text-blue-500 mt-0.5" />
+                          <BookOpen className="w-4 h-4 text-purple-500 mt-0.5" />
                           <div>
-                            <p className="text-sm font-medium text-gray-900">Contract Clause</p>
-                            <p className="text-sm text-gray-600">{risk.clause.title}</p>
-                            <p className="text-xs text-gray-500">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</p>
+                            <p className="text-sm font-medium text-gray-900">Playbook Rule</p>
+                            <p className="text-sm text-gray-600">{risk.rule.name}</p>
+                            <p className="text-xs text-gray-500">Category: {risk.rule.category}</p>
                           </div>
                         </div>
-                      )}
+                        {risk.clause && (
+                          <div className="flex items-start space-x-2">
+                            <FileText className="w-4 h-4 text-blue-500 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">Contract Clause</p>
+                              <p className="text-sm text-gray-600">{risk.clause.title}</p>
+                              <p className="text-xs text-gray-500">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Suggested Action */}
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <h4 className="text-sm font-medium text-blue-900 mb-2">Suggested Action</h4>
-                    <p className="text-sm text-blue-700">{getSuggestedAction(risk)}</p>
-                  </div>
-
-                  {/* Clause Content */}
-                  {risk.clause && (
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Clause Content</h4>
-                      <pre className="text-sm text-gray-600 whitespace-pre-wrap font-mono">
-                        {risk.clause.content}
-                      </pre>
+                    {/* Suggested Action */}
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <h4 className="text-sm font-medium text-blue-900 mb-2">Suggested Action</h4>
+                      <p className="text-sm text-blue-700">{getSuggestedAction(risk)}</p>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+
+                    {/* Clause Content */}
+                    {risk.clause && (
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Clause Content</h4>
+                        <pre className="text-sm text-gray-600 whitespace-pre-wrap font-mono">
+                          {risk.clause.content}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

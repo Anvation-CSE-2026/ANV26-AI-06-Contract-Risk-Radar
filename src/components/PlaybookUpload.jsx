@@ -1,54 +1,10 @@
-import React, { useState } from 'react'
-import { BookOpen, Upload, Plus, Trash2 } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { BookOpen, Upload, Plus, Trash2, Loader2 } from 'lucide-react'
+import { api } from '../api'
 
 const PlaybookUpload = ({ onUpload }) => {
-  const [rules, setRules] = useState([
-    {
-      id: 1,
-      name: 'Limitation of Liability Cap',
-      category: 'Risk',
-      description: 'Limitation of liability must be capped at a specific monetary amount or multiple of fees',
-      severity: 'high',
-      required: true,
-      keywords: ['limitation of liability', 'liability cap', 'shall not exceed']
-    },
-    {
-      id: 2,
-      name: 'Indemnification Clause',
-      category: 'Standard',
-      description: 'Mutual indemnification for third-party claims',
-      severity: 'medium',
-      required: true,
-      keywords: ['indemnify', 'indemnification', 'hold harmless']
-    },
-    {
-      id: 3,
-      name: 'Termination for Convenience',
-      category: 'Standard',
-      description: 'Right to terminate without cause with notice',
-      severity: 'low',
-      required: false,
-      keywords: ['terminate for convenience', 'termination without cause']
-    },
-    {
-      id: 4,
-      name: 'Governing Law',
-      category: 'Standard',
-      description: 'Governing law must be specified and preferably favorable jurisdiction',
-      severity: 'medium',
-      required: true,
-      keywords: ['governing law', 'governed by', 'jurisdiction']
-    },
-    {
-      id: 5,
-      name: 'Force Majeure',
-      category: 'Standard',
-      description: 'Force majeure clause for unforeseeable circumstances',
-      severity: 'low',
-      required: true,
-      keywords: ['force majeure', 'act of god', 'unforeseeable']
-    }
-  ])
+  const [rules, setRules] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
   const [newRule, setNewRule] = useState({
     name: '',
@@ -59,16 +15,91 @@ const PlaybookUpload = ({ onUpload }) => {
     keywords: ''
   })
 
-  const addRule = () => {
-    if (newRule.name && newRule.description) {
+  useEffect(() => {
+    loadRules()
+  }, [])
+
+  const loadRules = async () => {
+    try {
+      const data = await api.listPlaybookRules()
+      setRules(data)
+    } catch (error) {
+      console.error('Failed to load rules:', error)
+      // Set default rules if backend is not available
       setRules([
-        ...rules,
         {
-          ...newRule,
-          id: rules.length + 1,
-          keywords: newRule.keywords.split(',').map(k => k.trim()).filter(k => k)
+          id: 1,
+          name: 'Limitation of Liability Cap',
+          category: 'Risk',
+          description: 'Limitation of liability must be capped at a specific monetary amount or multiple of fees',
+          severity: 'high',
+          required: true,
+          keywords: ['limitation of liability', 'liability cap', 'shall not exceed']
+        },
+        {
+          id: 2,
+          name: 'Indemnification Clause',
+          category: 'Standard',
+          description: 'Mutual indemnification for third-party claims',
+          severity: 'medium',
+          required: true,
+          keywords: ['indemnify', 'indemnification', 'hold harmless']
+        },
+        {
+          id: 3,
+          name: 'Termination for Convenience',
+          category: 'Standard',
+          description: 'Right to terminate without cause with notice',
+          severity: 'low',
+          required: false,
+          keywords: ['terminate for convenience', 'termination without cause']
+        },
+        {
+          id: 4,
+          name: 'Governing Law',
+          category: 'Standard',
+          description: 'Governing law must be specified and preferably favorable jurisdiction',
+          severity: 'medium',
+          required: true,
+          keywords: ['governing law', 'governed by', 'jurisdiction']
+        },
+        {
+          id: 5,
+          name: 'Force Majeure',
+          category: 'Standard',
+          description: 'Force majeure clause for unforeseeable circumstances',
+          severity: 'low',
+          required: true,
+          keywords: ['force majeure', 'act of god', 'unforeseeable']
         }
       ])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const addRule = async () => {
+    if (newRule.name && newRule.description) {
+      const ruleData = {
+        ...newRule,
+        keywords: newRule.keywords.split(',').map(k => k.trim()).filter(k => k)
+      }
+      
+      try {
+        const result = await api.createPlaybookRule(ruleData)
+        setRules([...rules, result])
+      } catch (error) {
+        console.error('Failed to create rule:', error)
+        // Fallback to local state if backend fails
+        setRules([
+          ...rules,
+          {
+            ...ruleData,
+            id: rules.length + 1
+          }
+        ])
+      }
+      
       setNewRule({
         name: '',
         category: 'Standard',
@@ -80,8 +111,15 @@ const PlaybookUpload = ({ onUpload }) => {
     }
   }
 
-  const removeRule = (id) => {
-    setRules(rules.filter(rule => rule.id !== id))
+  const removeRule = async (id) => {
+    try {
+      await api.deletePlaybookRule(id)
+      setRules(rules.filter(rule => rule.id !== id))
+    } catch (error) {
+      console.error('Failed to delete rule:', error)
+      // Fallback to local state if backend fails
+      setRules(rules.filter(rule => rule.id !== id))
+    }
   }
 
   const handleSubmit = () => {
@@ -174,109 +212,117 @@ const PlaybookUpload = ({ onUpload }) => {
         ))}
       </div>
 
-      {/* Add New Rule */}
-      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-        <h3 className="font-medium text-gray-900 mb-4 flex items-center space-x-2">
-          <Plus className="w-4 h-4" />
-          <span>Add New Rule</span>
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rule Name
-            </label>
-            <input
-              type="text"
-              value={newRule.name}
-              onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-              className="input-field"
-              placeholder="e.g., Data Protection Clause"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category
-            </label>
-            <select
-              value={newRule.category}
-              onChange={(e) => setNewRule({ ...newRule, category: e.target.value })}
-              className="input-field"
-            >
-              <option value="Standard">Standard</option>
-              <option value="Risk">Risk</option>
-              <option value="Optional">Optional</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Severity
-            </label>
-            <select
-              value={newRule.severity}
-              onChange={(e) => setNewRule({ ...newRule, severity: e.target.value })}
-              className="input-field"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Keywords (comma-separated)
-            </label>
-            <input
-              type="text"
-              value={newRule.keywords}
-              onChange={(e) => setNewRule({ ...newRule, keywords: e.target.value })}
-              className="input-field"
-              placeholder="e.g., data protection, privacy, GDPR"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              value={newRule.description}
-              onChange={(e) => setNewRule({ ...newRule, description: e.target.value })}
-              className="input-field h-20"
-              placeholder="Describe the rule requirement..."
-            />
-          </div>
-          <div className="md:col-span-2 flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="required"
-              checked={newRule.required}
-              onChange={(e) => setNewRule({ ...newRule, required: e.target.checked })}
-              className="w-4 h-4 text-primary-600 rounded"
-            />
-            <label htmlFor="required" className="text-sm text-gray-700">
-              This rule is required
-            </label>
-          </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
         </div>
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={addRule}
-            className="btn-secondary"
-          >
-            <Plus className="w-4 h-4 inline mr-2" />
-            Add Rule
-          </button>
-        </div>
-      </div>
+      ) : (
+        <>
+          {/* Add New Rule */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <h3 className="font-medium text-gray-900 mb-4 flex items-center space-x-2">
+              <Plus className="w-4 h-4" />
+              <span>Add New Rule</span>
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rule Name
+                </label>
+                <input
+                  type="text"
+                  value={newRule.name}
+                  onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
+                  className="input-field"
+                  placeholder="e.g., Data Protection Clause"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <select
+                  value={newRule.category}
+                  onChange={(e) => setNewRule({ ...newRule, category: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="Standard">Standard</option>
+                  <option value="Risk">Risk</option>
+                  <option value="Optional">Optional</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Severity
+                </label>
+                <select
+                  value={newRule.severity}
+                  onChange={(e) => setNewRule({ ...newRule, severity: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Keywords (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={newRule.keywords}
+                  onChange={(e) => setNewRule({ ...newRule, keywords: e.target.value })}
+                  className="input-field"
+                  placeholder="e.g., data protection, privacy, GDPR"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={newRule.description}
+                  onChange={(e) => setNewRule({ ...newRule, description: e.target.value })}
+                  className="input-field h-20"
+                  placeholder="Describe the rule requirement..."
+                />
+              </div>
+              <div className="md:col-span-2 flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="required"
+                  checked={newRule.required}
+                  onChange={(e) => setNewRule({ ...newRule, required: e.target.checked })}
+                  className="w-4 h-4 text-primary-600 rounded"
+                />
+                <label htmlFor="required" className="text-sm text-gray-700">
+                  This rule is required
+                </label>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={addRule}
+                className="btn-secondary"
+              >
+                <Plus className="w-4 h-4 inline mr-2" />
+                Add Rule
+              </button>
+            </div>
+          </div>
 
-      {/* Submit Button */}
-      <div className="mt-6 flex justify-end">
-        <button
-          onClick={handleSubmit}
-          className="btn-primary"
-        >
-          Save Playbook
-        </button>
-      </div>
+          {/* Submit Button */}
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={handleSubmit}
+              className="btn-primary"
+            >
+              Save Playbook
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
