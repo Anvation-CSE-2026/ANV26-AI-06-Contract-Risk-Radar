@@ -1,14 +1,36 @@
-import React, { useState } from 'react'
-import { FileText, BookOpen, AlertTriangle, CheckCircle, Shield } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { FileText, BookOpen, AlertTriangle, CheckCircle, Shield, Settings as SettingsIcon } from 'lucide-react'
 import ContractUpload from './components/ContractUpload'
 import PlaybookUpload from './components/PlaybookUpload'
 import ClauseInventory from './components/ClauseInventory'
 import RiskAnalysis from './components/RiskAnalysis'
+import SettingsPanel from './components/Settings'
 
 function App() {
   const [contract, setContract] = useState(null)
   const [playbook, setPlaybook] = useState(null)
   const [activeTab, setActiveTab] = useState('upload')
+  const [settings, setSettings] = useState(null)
+  const [showSettings, setShowSettings] = useState(false)
+
+  // Load settings from localStorage on mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('contractRiskRadarSettings')
+    if (savedSettings) {
+      setSettings(JSON.parse(savedSettings))
+    } else {
+      // Default settings
+      setSettings({
+        country: 'US',
+        governingLaw: 'State Law (e.g., Delaware, New York)',
+        companyName: '',
+        defaultSeverity: 'medium',
+        requireAllRules: true,
+        customClauses: [],
+        crossCheckPolicies: []
+      })
+    }
+  }, [])
 
   const handleContractUpload = (contractData) => {
     setContract(contractData)
@@ -17,6 +39,11 @@ function App() {
 
   const handlePlaybookUpload = (playbookData) => {
     setPlaybook(playbookData)
+  }
+
+  const handleSettingsSave = (newSettings) => {
+    setSettings(newSettings)
+    localStorage.setItem('contractRiskRadarSettings', JSON.stringify(newSettings))
   }
 
   return (
@@ -51,6 +78,13 @@ function App() {
                 <BookOpen className="w-4 h-4" />
                 <span>Playbook: {playbook ? 'Loaded' : 'Not Loaded'}</span>
               </div>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Settings"
+              >
+                <SettingsIcon className="w-5 h-5 text-gray-600" />
+              </button>
             </div>
           </div>
         </div>
@@ -108,9 +142,22 @@ function App() {
           <ClauseInventory contract={contract} />
         )}
         {activeTab === 'risks' && contract && playbook && (
-          <RiskAnalysis contract={contract} playbook={playbook} />
+          <RiskAnalysis contract={contract} playbook={playbook} settings={settings} />
         )}
       </main>
+
+      {/* Settings Modal */}
+      {showSettings && settings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <SettingsPanel
+              settings={settings}
+              onSave={handleSettingsSave}
+              onClose={() => setShowSettings(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

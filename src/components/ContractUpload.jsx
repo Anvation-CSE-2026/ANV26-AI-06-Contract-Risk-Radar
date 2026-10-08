@@ -114,8 +114,15 @@ Provider shall provide email support during business hours, Monday through Frida
           name: result.name
         })
       } catch (error) {
-        console.error('Failed to create contract:', error)
-        alert('Failed to upload contract. Please try again.')
+        console.error('Backend not available, using client-side parsing:', error)
+        // Fallback to client-side parsing
+        const clauses = parseContract(contractText)
+        onUpload({
+          id: Date.now(),
+          text: contractText,
+          clauses: clauses,
+          name: sampleContract ? sampleContract.name : 'Uploaded Contract'
+        })
       } finally {
         setIsSubmitting(false)
       }

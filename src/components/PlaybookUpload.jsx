@@ -31,7 +31,7 @@ const PlaybookUpload = ({ onUpload }) => {
           id: 1,
           name: 'Limitation of Liability Cap',
           category: 'Risk',
-          description: 'Limitation of liability must be capped at a specific monetary amount or multiple of fees',
+          description: 'This clause limits the maximum amount your company can be held responsible for if something goes wrong. Without it, you could face unlimited financial liability. The cap should be based on the contract value (e.g., 12 months of fees) to protect your company from excessive damages claims.',
           severity: 'high',
           required: true,
           keywords: ['limitation of liability', 'liability cap', 'shall not exceed']
@@ -40,7 +40,7 @@ const PlaybookUpload = ({ onUpload }) => {
           id: 2,
           name: 'Indemnification Clause',
           category: 'Standard',
-          description: 'Mutual indemnification for third-party claims',
+          description: 'This clause protects your company from legal claims and losses caused by the other party. It should clearly state who will pay for damages, legal fees, and other costs if problems arise during the contract. Mutual indemnification means both parties agree to protect each other from third-party claims.',
           severity: 'medium',
           required: true,
           keywords: ['indemnify', 'indemnification', 'hold harmless']
@@ -49,7 +49,7 @@ const PlaybookUpload = ({ onUpload }) => {
           id: 3,
           name: 'Termination for Convenience',
           category: 'Standard',
-          description: 'Right to terminate without cause with notice',
+          description: 'Termination for Convenience',
           severity: 'low',
           required: false,
           keywords: ['terminate for convenience', 'termination without cause']
@@ -58,7 +58,7 @@ const PlaybookUpload = ({ onUpload }) => {
           id: 4,
           name: 'Governing Law',
           category: 'Standard',
-          description: 'Governing law must be specified and preferably favorable jurisdiction',
+          description: 'This specifies which country\'s or state\'s laws apply to the contract and where any legal disputes will be resolved. This is critical for knowing your legal rights and where you would need to go to court if disputes arise. Choose a jurisdiction favorable to your company and familiar with your business operations.',
           severity: 'medium',
           required: true,
           keywords: ['governing law', 'governed by', 'jurisdiction']
@@ -67,7 +67,7 @@ const PlaybookUpload = ({ onUpload }) => {
           id: 5,
           name: 'Force Majeure',
           category: 'Standard',
-          description: 'Force majeure clause for unforeseeable circumstances',
+          description: 'This clause protects both parties if unexpected events beyond their control (like natural disasters, wars, pandemics, or government actions) prevent them from fulfilling the contract. It should list qualifying events and explain contract suspension or termination rights, ensuring neither party is penalized for circumstances they cannot control.',
           severity: 'low',
           required: true,
           keywords: ['force majeure', 'act of god', 'unforeseeable']

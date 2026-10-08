@@ -2,13 +2,19 @@ import React, { useState, useEffect } from 'react'
 import { AlertTriangle, CheckCircle, AlertCircle, Search, Filter, ChevronDown, ChevronUp, Link2, FileText, BookOpen, Loader2 } from 'lucide-react'
 import { api } from '../api'
 
-const RiskAnalysis = ({ contract, playbook }) => {
+const RiskAnalysis = ({ contract, playbook, settings }) => {
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterSeverity, setFilterSeverity] = useState('all')
+  const [filterSeverity, setFilterSeverity] = useState(settings?.defaultSeverity || 'all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [expandedRisks, setExpandedRisks] = useState({})
   const [analysisResults, setAnalysisResults] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    if (settings?.defaultSeverity) {
+      setFilterSeverity(settings.defaultSeverity)
+    }
+  }, [settings])
 
   useEffect(() => {
     if (contract && contract.id && playbook) {
@@ -37,65 +43,128 @@ const RiskAnalysis = ({ contract, playbook }) => {
     const analysis = []
 
     playbook.forEach(rule => {
+      // Only analyze required rules
+      if (!rule.required) return
+
       const matchingClauses = contract.clauses.filter(clause => {
         const clauseLower = clause.content.toLowerCase()
-        return rule.keywords.some(keyword => 
+        return rule.keywords.some(keyword =>
           clauseLower.includes(keyword.toLowerCase())
         )
       })
 
       if (matchingClauses.length > 0) {
         matchingClauses.forEach(clause => {
-          analysis.push({
-            id: `${rule.id}-${clause.id}`,
-            rule: rule,
-            clause: clause,
-            status: 'found',
-            severity: rule.severity,
-            matchedKeywords: rule.keywords.filter(keyword => 
-              clause.content.toLowerCase().includes(keyword.toLowerCase())
-            )
-          })
+          // Detailed comparison: check if playbook requirements are fully met
+          const missingRequirements = checkMissingRequirements(rule.description, clause.content)
+
+          if (missingRequirements.length > 0) {
+            // Clause found but incomplete - mark as partial match with missing requirements
+            analysis.push({
+              id: `${rule.id}-${clause.id}`,
+              rule: rule,
+              clause: clause,
+              status: 'partial',
+              severity: rule.severity === 'low' ? 'medium' : rule.severity,
+              matchedKeywords: rule.keywords.filter(keyword =>
+                clause.content.toLowerCase().includes(keyword.toLowerCase())
+              ),
+              missingRequirements: missingRequirements
+            })
+          } else {
+            // Full match
+            analysis.push({
+              id: `${rule.id}-${clause.id}`,
+              rule: rule,
+              clause: clause,
+              status: 'found',
+              severity: rule.severity,
+              matchedKeywords: rule.keywords.filter(keyword =>
+                clause.content.toLowerCase().includes(keyword.toLowerCase())
+              ),
+              missingRequirements: []
+            })
+          }
         })
-      } else if (rule.required) {
+      } else {
         analysis.push({
           id: `missing-${rule.id}`,
           rule: rule,
           clause: null,
           status: 'missing',
           severity: rule.severity,
-          matchedKeywords: []
-        })
-      }
-    })
-
-    // Check for potentially risky clauses that don't match any rule
-    contract.clauses.forEach(clause => {
-      const hasMatch = playbook.some(rule => 
-        rule.keywords.some(keyword => 
-          clause.content.toLowerCase().includes(keyword.toLowerCase())
-        )
-      )
-      
-      if (!hasMatch && clause.content.length > 100) {
-        analysis.push({
-          id: `unreviewed-${clause.id}`,
-          rule: {
-            name: 'Unreviewed Clause',
-            category: 'Unknown',
-            description: 'This clause was not matched against any playbook rule',
-            severity: 'medium',
-            required: false
-          },
-          clause: clause,
-          status: 'unreviewed',
-          severity: 'medium',
-          matchedKeywords: []
+          matchedKeywords: [],
+          missingRequirements: []
         })
       }
     })
 
     return analysis
+  }
+
+  // Check if playbook description requirements are present in contract clause
+  const checkMissingRequirements = (playbookDesc, contractContent) => {
+    const missing = []
+    const contractLower = contractContent.toLowerCase()
+
+    // Extract key requirements from playbook description
+    // Look for patterns like: "should be", "must be", "within", "days", "percent", "%", "interest", "fee", "penalty"
+    const requirements = extractRequirements(playbookDesc)
+
+    requirements.forEach(req => {
+      if (!contractLower.includes(req.toLowerCase())) {
+        missing.push(req)
+      }
+    })
+
+    return missing
+  }
+
+  // Extract key requirements from description text
+  const extractRequirements = (text) => {
+    const requirements = []
+
+    // Extract time periods (e.g., "15 days", "30 days", "within 15 days")
+    const timeMatches = text.match(/(\d+)\s*(days|months|weeks|hours|business days)/gi)
+    if (timeMatches) {
+      timeMatches.forEach(match => requirements.push(match))
+    }
+
+    // Extract percentages (e.g., "5%", "10 percent")
+    const percentMatches = text.match(/(\d+)\s*%|(\d+)\s*percent/gi)
+    if (percentMatches) {
+      percentMatches.forEach(match => requirements.push(match))
+    }
+
+    // Extract monetary amounts (e.g., "$1000", "1000 dollars")
+    const moneyMatches = text.match(/\$\s*\d+[\d,]*|(\d+[\d,]*)\s*(dollars|usd|eur|gbp)/gi)
+    if (moneyMatches) {
+      moneyMatches.forEach(match => requirements.push(match))
+    }
+
+    // Extract key terms after "or" (alternative conditions)
+    const orMatches = text.match(/or\s+(.+?)(?:\.|,|$)/gi)
+    if (orMatches) {
+      orMatches.forEach(match => {
+        const condition = match.replace(/^or\s+/i, '').trim()
+        if (condition.length > 3) {
+          requirements.push(condition)
+        }
+      })
+    }
+
+    // Extract phrases with "should" or "must"
+    const shouldMustMatches = text.match(/(?:should|must)\s+(.+?)(?:\.|,|or|$)/gi)
+    if (shouldMustMatches) {
+      shouldMustMatches.forEach(match => {
+        const phrase = match.replace(/^(?:should|must)\s+/i, '').trim()
+        if (phrase.length > 5) {
+          requirements.push(phrase)
+        }
+      })
+    }
+
+    return requirements
   }
 
   const risks = analysisResults || analyzeRisks()
@@ -134,6 +203,8 @@ const RiskAnalysis = ({ contract, playbook }) => {
         return 'bg-green-50 border-green-200'
       case 'missing':
         return 'bg-red-50 border-red-200'
+      case 'partial':
+        return 'bg-orange-50 border-orange-200'
       case 'unreviewed':
         return 'bg-yellow-50 border-yellow-200'
       default:
@@ -147,6 +218,8 @@ const RiskAnalysis = ({ contract, playbook }) => {
         return <CheckCircle className="w-5 h-5 text-green-500" />
       case 'missing':
         return <AlertTriangle className="w-5 h-5 text-red-500" />
+      case 'partial':
+        return <AlertCircle className="w-5 h-5 text-orange-500" />
       case 'unreviewed':
         return <AlertCircle className="w-5 h-5 text-yellow-500" />
       default:
@@ -155,16 +228,46 @@ const RiskAnalysis = ({ contract, playbook }) => {
   }
 
   const getSuggestedAction = (risk) => {
-    if (risk.status === 'missing') {
-      return `Add ${risk.rule.name} clause to the contract`
-    } else if (risk.status === 'unreviewed') {
-      return 'Review this clause against playbook requirements'
+    if (risk.status === 'partial') {
+      const missingList = risk.missingRequirements.join(', ')
+      return `This clause was found but is incomplete. The playbook requires: ${missingList}. Consider adding these missing conditions to fully comply with your playbook requirements.`
+    } else if (risk.status === 'missing') {
+      const ruleName = risk.rule.name.toLowerCase()
+      const description = risk.rule.description || ''
+
+      // Generate detailed, simple explanation based on rule type
+      if (ruleName.includes('indemnification') || ruleName.includes('indemnify')) {
+        return `This contract is missing an indemnification clause. This clause protects your company from legal claims and losses caused by the other party. You should add language that clearly states who will pay for damages, legal fees, and other costs if problems arise during the contract.`
+      } else if (ruleName.includes('limitation') || ruleName.includes('liability')) {
+        return `No liability limitation clause found. This clause limits the maximum amount your company can be held responsible for if something goes wrong. Without it, you could face unlimited financial liability. Consider adding a cap on damages based on the contract value.`
+      } else if (ruleName.includes('termination') || ruleName.includes('terminate')) {
+        return `Missing termination clause. This section explains how either party can end the contract early and what happens when they do. You need clear rules about notice periods, fees for early termination, and what happens to ongoing work.`
+      } else if (ruleName.includes('confidential') || ruleName.includes('non-disclosure')) {
+        return `No confidentiality clause present. This clause protects sensitive information shared during the contract. It should define what information is confidential, who can see it, how long it must be protected, and what happens if someone shares it improperly.`
+      } else if (ruleName.includes('force majeure') || ruleName.includes('unforeseeable')) {
+        return `Missing force majeure clause. This section protects both parties if unexpected events beyond their control (like natural disasters, wars, or pandemics) prevent them from fulfilling the contract. It should list qualifying events and explain contract suspension or termination rights.`
+      } else if (ruleName.includes('payment') || ruleName.includes('fee')) {
+        return `No payment terms clause found. This section is critical for getting paid on time. It should specify payment amounts, due dates, acceptable payment methods, late payment penalties, and any conditions that must be met before payment is required.`
+      } else if (ruleName.includes('intellectual property') || ruleName.includes('ip')) {
+        return `Missing intellectual property clause. This determines who owns the work created under the contract. You need clear language about whether your company keeps ownership of its existing work, who owns new work created, and what rights each party has to use the intellectual property.`
+      } else if (ruleName.includes('warranty') || ruleName.includes('guarantee')) {
+        return `No warranty clause present. This section guarantees that the work or products meet certain standards. It should specify what is being warranted, the warranty period, what remedies are available if problems occur, and any limitations on the warranty.`
+      } else if (ruleName.includes('governing law') || ruleName.includes('jurisdiction')) {
+        return `Missing governing law clause. This specifies which country's or state's laws apply to the contract and where any legal disputes will be resolved. This is important for knowing your legal rights and where you would need to go to court if disputes arise.`
+      } else if (ruleName.includes('dispute') || ruleName.includes('resolution')) {
+        return `No dispute resolution clause found. This section explains how conflicts will be handled. It should outline steps like negotiation, mediation, or arbitration before going to court. Having a clear process can save time and money if disagreements occur.`
+      } else if (ruleName.includes('data protection') || ruleName.includes('privacy')) {
+        return `Missing data protection clause. This section addresses how personal data will be handled, stored, and protected. It should comply with relevant privacy laws (like GDPR) and specify data security measures, data retention periods, and responsibilities for data breaches.`
+      } else {
+        // Generic detailed explanation
+        return `The contract is missing the "${risk.rule.name}" clause. ${description || 'This clause is important for protecting your interests and ensuring clear expectations. You should add this section to avoid potential legal issues and misunderstandings.'}`
+      }
     } else if (risk.severity === 'high') {
-      return 'Immediate review and potential redline required'
+      return `This clause presents a high risk to your company. It may contain unfavorable terms, significant obligations, or inadequate protections. Immediate review by legal counsel is strongly recommended before signing. Consider redlining or negotiating these terms.`
     } else if (risk.severity === 'medium') {
-      return 'Review recommended'
+      return `This clause has medium risk. While not immediately critical, it should be reviewed to ensure the terms are fair and acceptable. You may want to negotiate certain provisions to better protect your interests.`
     } else {
-      return 'Clause appears compliant'
+      return `This clause appears to comply with your playbook requirements and presents minimal risk. No immediate action is needed, but you may still want to review it for completeness.`
     }
   }
 
@@ -174,8 +277,8 @@ const RiskAnalysis = ({ contract, playbook }) => {
     medium: risks.filter(r => r.severity === 'medium').length,
     low: risks.filter(r => r.severity === 'low').length,
     missing: risks.filter(r => r.status === 'missing').length,
-    found: risks.filter(r => r.status === 'found').length,
-    unreviewed: risks.filter(r => r.status === 'unreviewed').length
+    partial: risks.filter(r => r.status === 'partial').length,
+    found: risks.filter(r => r.status === 'found').length
   }
 
   return (
@@ -226,8 +329,8 @@ const RiskAnalysis = ({ contract, playbook }) => {
             >
               <option value="all">All Status</option>
               <option value="found">Found</option>
+              <option value="partial">Incomplete</option>
               <option value="missing">Missing</option>
-              <option value="unreviewed">Unreviewed</option>
             </select>
           </div>
         </div>
@@ -273,40 +376,226 @@ const RiskAnalysis = ({ contract, playbook }) => {
         </div>
       </div>
 
-      {/* Missing Clauses Section */}
-      {statistics.missing > 0 && (
-        <div className="card border-2 border-red-300 bg-red-50">
-          <div className="flex items-center space-x-3 mb-4">
-            <AlertTriangle className="w-6 h-6 text-red-600" />
-            <div>
-              <h3 className="text-lg font-bold text-red-900">Missing Required Clauses</h3>
-              <p className="text-sm text-red-700">
-                {statistics.missing} required clause(s) not found in the contract
-              </p>
+      <>
+        {/* Partial Matches Section */}
+        {statistics.partial > 0 && (
+          <div className="card border-2 border-orange-300 bg-orange-50">
+            <div className="flex items-center space-x-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-orange-600" />
+              <div>
+                <h3 className="text-lg font-bold text-orange-900">Incomplete Clauses</h3>
+                <p className="text-sm text-orange-700">
+                  {statistics.partial} clause(s) found but missing requirements from playbook
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {risks
+                .filter(risk => risk.status === 'partial')
+                .map(risk => (
+                  <div
+                    key={risk.id}
+                    className="bg-white rounded-lg p-4 border border-orange-200 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => toggleRisk(risk.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <AlertCircle className="w-5 h-5 text-orange-500" />
+                          <h4 className="font-semibold text-gray-900">{risk.rule.name}</h4>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(risk.severity)}`}>
+                            {risk.severity}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                            Incomplete
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600">{risk.rule.description}</p>
+                      </div>
+                      <div className="ml-4">
+                        {expandedRisks[risk.id] ? (
+                          <ChevronUp className="w-5 h-5 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-gray-400" />
+                        )}
+                      </div>
+                    </div>
+                    {expandedRisks[risk.id] && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                          <h4 className="text-sm font-medium text-orange-900 mb-2">Missing Requirements</h4>
+                          <ul className="text-sm text-orange-700 space-y-1">
+                            {risk.missingRequirements.map((req, idx) => (
+                              <li key={idx} className="flex items-start">
+                                <span className="mr-2">•</span>
+                                <span>{req}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                          <h4 className="text-sm font-medium text-blue-900 mb-2">Suggested Action</h4>
+                          <p className="text-sm text-blue-700">{getSuggestedAction(risk)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
             </div>
           </div>
-          <div className="space-y-2">
-            {risks
-              .filter(risk => risk.status === 'missing')
-              .map(risk => (
+        )}
+
+        {/* Missing Clauses Section */}
+        {statistics.missing > 0 && (
+          <div className="card border-2 border-red-300 bg-red-50">
+            <div className="flex items-center space-x-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+              <div>
+                <h3 className="text-lg font-bold text-red-900">Missing Required Clauses</h3>
+                <p className="text-sm text-red-700">
+                  {statistics.missing} required clause(s) not found in the contract
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {risks
+                .filter(risk => risk.status === 'missing')
+                .map(risk => (
+                  <div
+                    key={risk.id}
+                    className="bg-white rounded-lg p-4 border border-red-200 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => toggleRisk(risk.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <AlertTriangle className="w-5 h-5 text-red-500" />
+                          <h4 className="font-semibold text-gray-900">{risk.rule.name}</h4>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(risk.severity)}`}>
+                            {risk.severity}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                            Required
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600">{risk.rule.description}</p>
+                      </div>
+                      <div className="ml-4">
+                        {expandedRisks[risk.id] ? (
+                          <ChevronUp className="w-5 h-5 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-gray-400" />
+                        )}
+                      </div>
+                    </div>
+                    {expandedRisks[risk.id] && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
+                            <BookOpen className="w-4 h-4 text-purple-500" />
+                            <span>Playbook Rule Details</span>
+                          </h4>
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">Rule Name</p>
+                              <p className="text-sm text-gray-600">{risk.rule.name}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">Category</p>
+                              <p className="text-sm text-gray-600">{risk.rule.category}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">Description</p>
+                              <p className="text-sm text-gray-600">{risk.rule.description}</p>
+                            </div>
+                            {risk.rule.keywords.length > 0 && (
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">Keywords to look for</p>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {risk.rule.keywords.map((keyword, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs"
+                                    >
+                                      {keyword}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                          <h4 className="text-sm font-medium text-blue-900 mb-2">Suggested Action</h4>
+                          <p className="text-sm text-blue-700">{getSuggestedAction(risk)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Risks List */}
+        {isLoading ? (
+          <div className="card flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-gray-400 animate-spin mr-3" />
+            <span className="text-gray-500">Analyzing contract...</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredRisks.length === 0 ? (
+              <div className="card text-center py-12">
+                <CheckCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <p className="text-gray-500">No risks found matching your criteria</p>
+              </div>
+            ) : (
+              filteredRisks.map((risk) => (
                 <div
                   key={risk.id}
-                  className="bg-white rounded-lg p-4 border border-red-200 hover:shadow-md transition-shadow cursor-pointer"
+                  className={`card border-2 ${getStatusColor(risk.status)} cursor-pointer hover:shadow-md transition-shadow`}
                   onClick={() => toggleRisk(risk.id)}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
-                        <AlertTriangle className="w-5 h-5 text-red-500" />
-                        <h4 className="font-semibold text-gray-900">{risk.rule.name}</h4>
+                        {getStatusIcon(risk.status)}
+                        <h3 className="font-semibold text-gray-900">{risk.rule.name}</h3>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(risk.severity)}`}>
                           {risk.severity}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                          Required
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          risk.status === 'found' ? 'bg-green-100 text-green-700' :
+                          risk.status === 'missing' ? 'bg-red-100 text-red-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {risk.status}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600">{risk.rule.description}</p>
+                      <p className="text-sm text-gray-600 mb-2">{risk.rule.description}</p>
+                      
+                      {risk.clause && (
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                          <FileText className="w-4 h-4" />
+                          <span>Matched with: {risk.clause.title}</span>
+                          <span className="text-gray-300">•</span>
+                          <span className="text-primary-600">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</span>
+                        </div>
+                      )}
+                      
+                      {risk.matchedKeywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {risk.matchedKeywords.map((keyword, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="ml-4">
                       {expandedRisks[risk.id] ? (
@@ -316,176 +605,60 @@ const RiskAnalysis = ({ contract, playbook }) => {
                       )}
                     </div>
                   </div>
+
                   {expandedRisks[risk.id] && (
                     <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                      {/* Traceability */}
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
-                          <BookOpen className="w-4 h-4 text-purple-500" />
-                          <span>Playbook Rule Details</span>
+                          <Link2 className="w-4 h-4" />
+                          <span>Traceability</span>
                         </h4>
                         <div className="space-y-2">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Rule Name</p>
-                            <p className="text-sm text-gray-600">{risk.rule.name}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Category</p>
-                            <p className="text-sm text-gray-600">{risk.rule.category}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Description</p>
-                            <p className="text-sm text-gray-600">{risk.rule.description}</p>
-                          </div>
-                          {risk.rule.keywords.length > 0 && (
+                          <div className="flex items-start space-x-2">
+                            <BookOpen className="w-4 h-4 text-purple-500 mt-0.5" />
                             <div>
-                              <p className="text-sm font-medium text-gray-900">Keywords to look for</p>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {risk.rule.keywords.map((keyword, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs"
-                                  >
-                                    {keyword}
-                                  </span>
-                                ))}
+                              <p className="text-sm font-medium text-gray-900">Playbook Rule</p>
+                              <p className="text-sm text-gray-600">{risk.rule.name}</p>
+                              <p className="text-xs text-gray-500">Category: {risk.rule.category}</p>
+                            </div>
+                          </div>
+                          {risk.clause && (
+                            <div className="flex items-start space-x-2">
+                              <FileText className="w-4 h-4 text-blue-500 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">Contract Clause</p>
+                                <p className="text-sm text-gray-600">{risk.clause.title}</p>
+                                <p className="text-xs text-gray-500">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</p>
                               </div>
                             </div>
                           )}
                         </div>
                       </div>
+
+                      {/* Suggested Action */}
                       <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                         <h4 className="text-sm font-medium text-blue-900 mb-2">Suggested Action</h4>
                         <p className="text-sm text-blue-700">{getSuggestedAction(risk)}</p>
                       </div>
+
+                      {/* Clause Content */}
+                      {risk.clause && (
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Clause Content</h4>
+                          <pre className="text-sm text-gray-600 whitespace-pre-wrap font-mono">
+                            {risk.clause.content}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              ))}
+              ))
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Risks List */}
-      {isLoading ? (
-        <div className="card flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-gray-400 animate-spin mr-3" />
-          <span className="text-gray-500">Analyzing contract...</span>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredRisks.length === 0 ? (
-            <div className="card text-center py-12">
-              <CheckCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-              <p className="text-gray-500">No risks found matching your criteria</p>
-            </div>
-          ) : (
-            filteredRisks.map((risk) => (
-              <div
-                key={risk.id}
-                className={`card border-2 ${getStatusColor(risk.status)} cursor-pointer hover:shadow-md transition-shadow`}
-                onClick={() => toggleRisk(risk.id)}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      {getStatusIcon(risk.status)}
-                      <h3 className="font-semibold text-gray-900">{risk.rule.name}</h3>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(risk.severity)}`}>
-                        {risk.severity}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        risk.status === 'found' ? 'bg-green-100 text-green-700' :
-                        risk.status === 'missing' ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {risk.status}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-2">{risk.rule.description}</p>
-                    
-                    {risk.clause && (
-                      <div className="flex items-center space-x-2 text-sm text-gray-500">
-                        <FileText className="w-4 h-4" />
-                        <span>Matched with: {risk.clause.title}</span>
-                        <span className="text-gray-300">•</span>
-                        <span className="text-primary-600">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</span>
-                      </div>
-                    )}
-                    
-                    {risk.matchedKeywords.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {risk.matchedKeywords.map((keyword, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs"
-                          >
-                            {keyword}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="ml-4">
-                    {expandedRisks[risk.id] ? (
-                      <ChevronUp className="w-5 h-5 text-gray-400" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    )}
-                  </div>
-                </div>
-
-                {expandedRisks[risk.id] && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
-                    {/* Traceability */}
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
-                        <Link2 className="w-4 h-4" />
-                        <span>Traceability</span>
-                      </h4>
-                      <div className="space-y-2">
-                        <div className="flex items-start space-x-2">
-                          <BookOpen className="w-4 h-4 text-purple-500 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Playbook Rule</p>
-                            <p className="text-sm text-gray-600">{risk.rule.name}</p>
-                            <p className="text-xs text-gray-500">Category: {risk.rule.category}</p>
-                          </div>
-                        </div>
-                        {risk.clause && (
-                          <div className="flex items-start space-x-2">
-                            <FileText className="w-4 h-4 text-blue-500 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">Contract Clause</p>
-                              <p className="text-sm text-gray-600">{risk.clause.title}</p>
-                              <p className="text-xs text-gray-500">Lines {risk.clause.lineStart}-{risk.clause.lineEnd}</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Suggested Action */}
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                      <h4 className="text-sm font-medium text-blue-900 mb-2">Suggested Action</h4>
-                      <p className="text-sm text-blue-700">{getSuggestedAction(risk)}</p>
-                    </div>
-
-                    {/* Clause Content */}
-                    {risk.clause && (
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Clause Content</h4>
-                        <pre className="text-sm text-gray-600 whitespace-pre-wrap font-mono">
-                          {risk.clause.content}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      )}
+        )}
+      </>
     </div>
   )
 }

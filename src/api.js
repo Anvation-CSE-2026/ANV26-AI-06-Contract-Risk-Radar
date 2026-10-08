@@ -1,15 +1,36 @@
 const API_BASE_URL = 'http://localhost:5000/api';
+const TIMEOUT_MS = 2000; // 2 second timeout for API calls
+
+const fetchWithTimeout = async (url, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Backend not available (timeout)');
+    }
+    throw error;
+  }
+};
 
 export const api = {
   // Health check
   healthCheck: async () => {
-    const response = await fetch(`${API_BASE_URL}/health`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}/health`);
     return response.json();
   },
 
   // Contracts
   createContract: async (contractData) => {
-    const response = await fetch(`${API_BASE_URL}/contracts`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/contracts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contractData)
@@ -19,19 +40,19 @@ export const api = {
   },
 
   getContract: async (contractId) => {
-    const response = await fetch(`${API_BASE_URL}/contracts/${contractId}`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}/contracts/${contractId}`);
     if (!response.ok) throw new Error('Failed to get contract');
     return response.json();
   },
 
   listContracts: async () => {
-    const response = await fetch(`${API_BASE_URL}/contracts`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}/contracts`);
     return response.json();
   },
 
   // Playbook Rules
   createPlaybookRule: async (ruleData) => {
-    const response = await fetch(`${API_BASE_URL}/playbook/rules`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/playbook/rules`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ruleData)
@@ -41,12 +62,12 @@ export const api = {
   },
 
   listPlaybookRules: async () => {
-    const response = await fetch(`${API_BASE_URL}/playbook/rules`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}/playbook/rules`);
     return response.json();
   },
 
   deletePlaybookRule: async (ruleId) => {
-    const response = await fetch(`${API_BASE_URL}/playbook/rules/${ruleId}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/playbook/rules/${ruleId}`, {
       method: 'DELETE'
     });
     if (!response.ok) throw new Error('Failed to delete rule');
@@ -55,7 +76,7 @@ export const api = {
 
   // Risk Analysis
   performAnalysis: async (contractId) => {
-    const response = await fetch(`${API_BASE_URL}/analysis`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/analysis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contract_id: contractId })
@@ -65,13 +86,13 @@ export const api = {
   },
 
   getAnalysis: async (analysisId) => {
-    const response = await fetch(`${API_BASE_URL}/analysis/${analysisId}`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}/analysis/${analysisId}`);
     if (!response.ok) throw new Error('Failed to get analysis');
     return response.json();
   },
 
   getContractAnalysis: async (contractId) => {
-    const response = await fetch(`${API_BASE_URL}/contracts/${contractId}/analysis`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}/contracts/${contractId}/analysis`);
     if (!response.ok) throw new Error('Failed to get contract analysis');
     return response.json();
   }
